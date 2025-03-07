@@ -4,6 +4,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.firefox.options import Options
 import csv
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
 
 # Опции для Firefox
 options = Options()
@@ -16,14 +19,14 @@ options.add_argument(
 
 # Запуск браузера Firefox
 driver = webdriver.Firefox(options=options)
-url = 'https://www.divan.ru/category/pramye-divany'
+url = 'https://skdesign.ru/product-category/sofas?utm_source=yandex&utm_medium=cpc&utm_campaign=rf_konkurenti_divani_poisk&utm_content=16656615084&utm_term=---autotargeting&calltouch_tm=yd_c%3A115929218_gb%3A5512824776_ad%3A16656615084_ph%3A53677718962_st%3Asearch_pt%3Apremium_p%3A2_s%3Anone_dt%3Adesktop_reg%3A213_ret%3A53677718962_apt%3Anone&yclid=10471959217663639551'
 
 try:
     driver.get(url)
 
     # Ожидание загрузки элементов с ценами
     prices = WebDriverWait(driver, 120).until(
-        EC.presence_of_all_elements_located((By.XPATH, "//span[@class='ui-LD-ZU KIkOH' or @data-testid='price']"))
+        EC.presence_of_all_elements_located((By.XPATH, "//div[@class='CardPricesc__CardPriceContainer-sc-1mqsou5-0 fBumnl']"))
     )
 
     if not prices:
@@ -36,15 +39,16 @@ try:
 
         # Запись цены в CSV файл
         for price in prices:
-            writer.writerow([price.text.strip()])  # Записываем цену в CSV
+            writer.writerow([price.text.strip('"')])  # Записываем цену в CSV
 
     print("Цены успешно записаны в файл 'divan_prices.csv'.")
 
-
+###
 
     def clean_price(price):
-        # Удаление "руб." и преобразование в число
-        return int(price.replace('руб.', '').replace(' ', ''))
+        # Удаление всех символов, кроме цифр
+        digits_only = re.sub('[^0-9]', '', price)
+        return int(digits_only) if digits_only else 0  # Возврат 0, если строка пустая
 
 
     # Чтение данных из исходного CSV файла и их обработка
@@ -62,13 +66,36 @@ try:
 
         # Обработка и запись данных в строках
         for row in reader:
-            clean_row = [clean_price(row[0])]
-            writer.writerow(clean_row)
+            for price in row[0].split('\n'):  # Разделяем строку по символу новой строки
+                clean_row = [clean_price(price.strip())]  # Чистим каждую часть и записываем в новый ряд
+                writer.writerow(clean_row)
 
     print(f"Обработанные данные сохранены в файл {output_file}")
+###
+
 
 
 except Exception as e:
     print(f"Ошибка: {e}")
-finally:
-    driver.quit()
+
+
+# Чтение очищенных данных из CSV файла
+cleaned_prices_df = pd.read_csv('cleaned_prices.csv')
+
+# Расчет средней цены
+average_price = cleaned_prices_df['Price'].mean()
+print(f'Средняя цена на диваны составляет: {average_price:.0f} рублей')
+
+# Построение гистограммы цен
+plt.figure(figsize=(10, 6))
+plt.hist(cleaned_prices_df['Price'], bins=20, color='skyblue', edgecolor='black')
+plt.title('Распределение цен на диваны')
+plt.xlabel('Цена (руб.)')
+plt.ylabel('Количество')
+plt.grid(axis='y', alpha=0.75)
+
+
+plt.show()
+
+# Закрытие браузера
+driver.quit()
